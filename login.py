@@ -6,6 +6,7 @@ import secrets
 import threading
 import urllib
 import webbrowser
+from time import sleep
 
 from werkzeug.serving import make_server
 
@@ -17,6 +18,8 @@ app = Flask(__name__)
 
 @app.route("/callback")
 def callback():
+    global received_callback
+    received_callback = True
     code = request.args['code']
     received_state = request.args['state']
     if received_state != state:
@@ -38,11 +41,6 @@ class ServerThread(threading.Thread):
 
     def shutdown(self):
         self.srv.shutdown()
-
-
-def stop_server():
-    global server
-    server.shutdown()
 
 
 def auth0_url_encode(byte_data):
@@ -75,8 +73,10 @@ url_parameters['code_challenge_method'] = 'S256'
 url_parameters['state'] = state
 url = base_url + urllib.parse.urlencode(url_parameters)
 
+received_callback = False
 webbrowser.open_new(url)
 server = ServerThread(app)
 server.start()
-print('server started')
-
+while not received_callback:
+    sleep(1)
+server.shutdown()
