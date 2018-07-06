@@ -18,13 +18,11 @@ app = Flask(__name__)
 
 @app.route("/callback")
 def callback():
-    global received_callback
+    global received_callback, code, received_state
     received_callback = True
     code = request.args['code']
     received_state = request.args['state']
-    if received_state != state:
-        return "Booo hiss"
-    return "Hello World!"
+    return "Please return to your application now."
 
 
 class ServerThread(threading.Thread):
@@ -80,3 +78,5 @@ server.start()
 while not received_callback:
     sleep(1)
 server.shutdown()
+print('window should be closed: ' + code)
+#check code and received state
