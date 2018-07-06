@@ -14,6 +14,15 @@ from flask import Flask, request
 app = Flask(__name__)
 
 
+@app.route("/callback")
+def callback():
+    code = request.args['code']
+    received_state = request.args['state']
+    if received_state != state:
+        return "Booo hiss"
+    return "Hello World!"
+
+
 def auth0_url_encode(byte_data):
     return base64.urlsafe_b64encode(byte_data).replace(b'=', b'').decode('utf-8')
 
@@ -45,12 +54,5 @@ url_parameters['state'] = state
 url = base_url + urllib.parse.urlencode(url_parameters)
 
 webbrowser.open_new(url)
+app.run('127.0.0.1', 5000)
 
-
-@app.route("/callback")
-def callback():
-    code = request.args['code']
-    received_state = request.args['state']
-    if received_state != state:
-        return "Booo hiss"
-    return "Hello World!"
