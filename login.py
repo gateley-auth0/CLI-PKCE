@@ -1,7 +1,9 @@
 import base64
 import hashlib
+import json
 import os
 import pathlib
+import requests
 import secrets
 import threading
 import urllib
@@ -42,33 +44,34 @@ class ServerThread(threading.Thread):
 
 
 def auth0_url_encode(byte_data):
-    return base64.urlsafe_b64encode(byte_data).replace(b'=', b'').decode('utf-8')
+    return base64.urlsafe_b64encode(byte_data).decode('utf-8').replace('=', '')
 
 
 def generate_challenge(a_verifier):
-    return auth0_url_encode(hashlib.sha256(a_verifier).digest())
+    return auth0_url_encode(hashlib.sha256(a_verifier.encode()).digest())
 
 
 env_path = pathlib.Path('.') / '.env'
 dotenv.load_dotenv(dotenv_path=env_path)
 
-verifier = secrets.token_bytes(32)
+verifier = auth0_url_encode(secrets.token_bytes(32))
 challenge = generate_challenge(verifier)
 state = auth0_url_encode(secrets.token_bytes(32))
-
 client_id = os.getenv('AUTH0_CLIENT_ID')
 tenant = os.getenv('AUTH0_TENANT')
+redirect_uri = 'http://127.0.0.1:5000/callback'
 
 base_url = 'https://%s.auth0.com/authorize?' % tenant
-url_parameters = {}
-url_parameters['audience'] = 'urn:cli-sample:api'
-url_parameters['scope'] = 'profile'
-url_parameters['response_type'] = 'code'
-url_parameters['redirect_uri'] = 'http://127.0.0.1:5000/callback'
-url_parameters['client_id'] = client_id
-url_parameters['code_challenge'] = challenge
-url_parameters['code_challenge_method'] = 'S256'
-url_parameters['state'] = state
+url_parameters = {
+    'audience': 'https://gateley-empire-life.auth0.com/api/v2/',
+    'scope': 'profile openid email read:clients create:clients read:client_keys',
+    'response_type': 'code',
+    'redirect_uri': redirect_uri,
+    'client_id': client_id,
+    'code_challenge': challenge.replace('=', ''),
+    'code_challenge_method': 'S256',
+    'state': state
+}
 url = base_url + urllib.parse.urlencode(url_parameters)
 
 received_callback = False
@@ -78,5 +81,26 @@ server.start()
 while not received_callback:
     sleep(1)
 server.shutdown()
-print('window should be closed: ' + code)
-#check code and received state
+
+if state != received_state:
+    print("Error: session replay or similar attack in progress. Please log out of all connections.")
+    exit(-1)
+
+
+url = 'https://%s.auth0.com/oauth/token' % tenant
+headers = {'Content-Type': 'application/json'}
+body = {'grant_type': 'authorization_code',
+        'client_id': client_id,
+        'code_verifier': verifier,
+        'code': code,
+        'audience': 'https://gateley-empire-life.auth0.com/api/v2/',
+        'redirect_uri': redirect_uri}
+r = requests.post(url, headers=headers, data=json.dumps(body))
+data = r.json()
+print(data['access_token'])
+
+url = 'https://%s.auth0.com/api/v2/clients' % tenant
+headers = {'Authorization': 'Bearer %s' % data['access_token']}
+r = requests.get(url, headers=headers)
+
+pass
