@@ -97,10 +97,11 @@ body = {'grant_type': 'authorization_code',
         'redirect_uri': redirect_uri}
 r = requests.post(url, headers=headers, data=json.dumps(body))
 data = r.json()
-print(data['access_token'])
 
 url = 'https://%s.auth0.com/api/v2/clients' % tenant
 headers = {'Authorization': 'Bearer %s' % data['access_token']}
 r = requests.get(url, headers=headers)
+data = r.json()
 
-pass
+for client in data:
+    print("Client: " + client['name'])
