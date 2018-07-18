@@ -20,14 +20,28 @@ app = Flask(__name__)
 
 @app.route("/callback")
 def callback():
-    global received_callback, code, received_state
-    received_callback = True
-    code = request.args['code']
+    """
+    The callback is invoked after a completed login attempt (succesful or otherwise).
+    It sets global variables with the auth code or error messages, then sets the
+    polling flag received_callback.
+    :return:
+    """
+    global received_callback, code, error_message, received_state
+    error_message = None
+    code = None
+    if 'error' in request.args:
+        error_message = request.args['error'] + ': ' + request.args['error_description']
+    else:
+        code = request.args['code']
     received_state = request.args['state']
+    received_callback = True
     return "Please return to your application now."
 
 
 class ServerThread(threading.Thread):
+    """
+    The Flask server is done this way to allow shutting down after a single request has been received.
+    """
 
     def __init__(self, app):
         threading.Thread.__init__(self)
@@ -44,6 +58,11 @@ class ServerThread(threading.Thread):
 
 
 def auth0_url_encode(byte_data):
+    """
+    Safe encoding handles + and /, and also replace = with nothing
+    :param byte_data:
+    :return:
+    """
     return base64.urlsafe_b64encode(byte_data).decode('utf-8').replace('=', '')
 
 
@@ -61,6 +80,7 @@ client_id = os.getenv('AUTH0_CLIENT_ID')
 tenant = os.getenv('AUTH0_TENANT')
 redirect_uri = 'http://127.0.0.1:5000/callback'
 
+# We generate a nonce (state) that is used to protect against attackers invoking the callback
 base_url = 'https://%s.auth0.com/authorize?' % tenant
 url_parameters = {
     'audience': 'https://gateley-empire-life.auth0.com/api/v2/',
@@ -74,6 +94,9 @@ url_parameters = {
 }
 url = base_url + urllib.parse.urlencode(url_parameters)
 
+# Open the browser window to the login url
+# Start the server
+# Poll til the callback has been invoked
 received_callback = False
 webbrowser.open_new(url)
 server = ServerThread(app)
@@ -86,7 +109,12 @@ if state != received_state:
     print("Error: session replay or similar attack in progress. Please log out of all connections.")
     exit(-1)
 
+if error_message:
+    print("An error occurred:")
+    print(error_message)
+    exit(-1)
 
+# Exchange the code for a token
 url = 'https://%s.auth0.com/oauth/token' % tenant
 headers = {'Content-Type': 'application/json'}
 body = {'grant_type': 'authorization_code',
@@ -98,6 +126,7 @@ body = {'grant_type': 'authorization_code',
 r = requests.post(url, headers=headers, data=json.dumps(body))
 data = r.json()
 
+# Use the token to list the clients
 url = 'https://%s.auth0.com/api/v2/clients' % tenant
 headers = {'Authorization': 'Bearer %s' % data['access_token']}
 r = requests.get(url, headers=headers)
