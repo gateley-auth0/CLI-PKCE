@@ -28,6 +28,33 @@ window automatically)
 
 The app will list the clients available in the tenant (by accessing the management API).
 
+# Security considerations
+
+The app should be flagged as allowed to access the management API, as well as any user allowed to use the app. These
+can be enforced with a rule like 
+```function (user, context, callback) {
+  var audience = '';
+  audience = audience ||
+    (context.request && context.request.query && context.request.query.audience) ||
+    (context.request && context.request.body && context.request.body.audience);
+  if (audience === 'https://gateley-empire-life.auth0.com/api/v2/') {
+    var client_authorized = context.clientMetadata && context.clientMetadata.ManagementAPIAccess === "True";
+    user.app_metadata = user.app_metadata || {};
+    var user_authorized = user.app_metadata.roles.indexOf('cli') !== -1;
+    if (client_authorized && user_authorized) {
+      context.accessToken.scope = "read:clients read:connections";
+      callback(null, user, context);
+    } else {
+      callback(new UnauthorizedError('Access denied'));
+    }
+  } else {
+    callback(null, user, context);
+  }
+}
+```
+Th app metadata should have `ManagementAPIAccess` set to true, and a user should have their app metada include `cli` in
+their roles
+
 ## What is Auth0?
 
 Auth0 helps you to:
